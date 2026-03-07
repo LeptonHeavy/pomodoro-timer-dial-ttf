@@ -236,7 +236,7 @@ void Display::drawSettingsMenu(const PomodoroSettings& settings, uint8_t menuInd
 
         // Draw highlight only for selected item
         if (i == menuIndex) {
-            M5Dial.Display.fillRect(10, yPos - 2, SCREEN_WIDTH - 20, 18, COLOR_PROGRESS_BG);
+            M5Dial.Display.fillRect(10, yPos - 5, SCREEN_WIDTH - 20, 18, COLOR_PROGRESS_BG);
             M5Dial.Display.setTextColor(COLOR_WORK);
         } else {
             M5Dial.Display.setTextColor(COLOR_TEXT);
