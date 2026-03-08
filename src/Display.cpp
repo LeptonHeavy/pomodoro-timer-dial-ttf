@@ -6,8 +6,29 @@
 
 #include "Display.h"
 
-Display::Display() {
+Display::Display() : timerSprite(&M5Dial.Display) {
     // Constructor - nothing to initialize
+}
+
+bool Display::loadUiFont(const char* path) {
+    if (!SPIFFS.exists(path)) {
+        Serial.print("Missing font file: ");
+        Serial.println(path);
+        return false;
+    }
+
+    return M5Dial.Display.loadFont(SPIFFS, path);
+}
+
+void Display::ensureTimerSprite() {
+    if (timerSpriteReady) {
+        return;
+    }
+
+    timerSprite.setColorDepth(16);
+    timerSprite.createSprite(220, 80);   
+    timerSprite.setTextDatum(middle_center);
+    timerSpriteReady = true;
 }
 
 void Display::drawCircularProgress(float progress, uint16_t color, TimerState state) {
@@ -43,21 +64,33 @@ void Display::drawTimerDisplay(uint32_t seconds, uint16_t color, TimerState stat
             drawCircularProgress(progress, COLOR_TEXT, state); // Draw static white circle
         }
         // Draw tomato icon after screen clear
-        drawTomatoIcon(state);
+        // drawTomatoIcon(state); now omitting the tomato
         lastProgress = progress;
     }
     // Circle is static - no need to update it based on progress changes
     
     // Always redraw time text in white (it changes every second, or when adjusting)
-    // Position timer in the exact center of the circle
-    M5Dial.Display.setTextColor(COLOR_TEXT);
-    M5Dial.Display.setTextDatum(middle_center);
-    M5Dial.Display.setTextSize(5); // Bigger font size (was 4)
-    // Clear area behind text first with state background - centered
-    int16_t timerY = CENTER_Y; // Exact center of circle
-    M5Dial.Display.fillRect(CENTER_X - 80, timerY - 25, 160, 45, bgColor); // Larger clear area for bigger text
-    M5Dial.Display.drawString(formatTime(seconds).c_str(), CENTER_X, timerY);
-    
+    // Draw into an off-screen sprite, then push the finished image to the display
+    int16_t timerY = CENTER_Y - 10; // Move timer up slightly to make room for status text below
+
+    ensureTimerSprite();
+
+    timerSprite.fillSprite(bgColor);
+    timerSprite.setTextColor(COLOR_TEXT, bgColor);
+    timerSprite.setTextDatum(middle_center);
+
+    if (timerSprite.loadFont(SPIFFS, "/fonts/RobotoMonoBold72.vlw")) {
+        timerSprite.drawString(formatTime(seconds).c_str(), 110, 40);
+        timerSprite.unloadFont();
+    } else {
+        // Fallback to current built-in font behavior
+        timerSprite.setTextSize(5);
+        timerSprite.drawString(formatTime(seconds).c_str(), 110, 50);
+    }
+
+    // Push the completed timer image to the physical display in one operation
+    timerSprite.pushSprite(CENTER_X - 110, timerY - 50);
+
     // Draw status text inside the circle, below the timer
     const char* statusText = "";
     if (state == STATE_IDLE) {
@@ -72,13 +105,22 @@ void Display::drawTimerDisplay(uint32_t seconds, uint16_t color, TimerState stat
         statusText = "Long Break";
     }
     
+
     // Clear area for status text inside circle - positioned below centered timer
-    M5Dial.Display.fillRect(CENTER_X - 60, CENTER_Y + 30, 120, 20, bgColor);
-    M5Dial.Display.setTextColor(TFT_WHITE);
-    M5Dial.Display.setTextDatum(middle_center);
-    M5Dial.Display.setTextSize(2); // Bigger text size
-    M5Dial.Display.drawString(statusText, CENTER_X, CENTER_Y + 40); // Positioned lower (was +35)
-    
+    // Only redraw status text when the screen is fully redrawn
+    if (fullRedraw) {
+        M5Dial.Display.fillRect(CENTER_X - 80, CENTER_Y + 25, 160, 30, bgColor);
+        M5Dial.Display.setTextColor(TFT_WHITE);
+        M5Dial.Display.setTextDatum(middle_center);
+
+        if (loadUiFont("/fonts/RobotoRegularBold20.vlw")) {
+            M5Dial.Display.drawString(statusText, CENTER_X, CENTER_Y + 35);
+            M5Dial.Display.unloadFont();
+        } else {
+            M5Dial.Display.setTextSize(2);
+            M5Dial.Display.drawString(statusText, CENTER_X, CENTER_Y + 35);
+        }
+    }
     // No moving indicator dot - static circle only
 }
 
@@ -102,7 +144,15 @@ void Display::drawStatusText(const char* text, uint16_t color, TimerState state,
     } else {
         instruction = "Press: Pause | Hold: Reset";
     }
-    M5Dial.Display.drawString(instruction, CENTER_X, instructionY);
+    if (loadUiFont("/fonts/RobotoRegularBold12.vlw")) {
+        M5Dial.Display.drawString(instruction, CENTER_X, instructionY-10);
+        M5Dial.Display.unloadFont();
+    } else {
+        // Fallback to current built-in font behavior
+        M5Dial.Display.setTextSize(1);
+        M5Dial.Display.drawString(instruction, CENTER_X, instructionY);
+    } 
+    
     
     // Draw settings gear icon at bottom center (only when not in settings)
     // Simple approach: always draw when state changed from what was displayed last frame
@@ -111,7 +161,7 @@ void Display::drawStatusText(const char* text, uint16_t color, TimerState state,
         int16_t iconY = SCREEN_HEIGHT - 20;
         int16_t iconSize = 24;
         int16_t iconX = CENTER_X - iconSize/2;
-        int16_t iconYPos = iconY - iconSize/2;
+        int16_t iconYPos = (iconY - iconSize/2)-3; // Adjusted to align better with text
         
         // Clear area for icon
         M5Dial.Display.fillRect(CENTER_X - 15, iconY - 15, 30, 30, bgColor);
@@ -164,17 +214,26 @@ void Display::drawPomodoroCounter(uint8_t completedPomodoros, TimerState state) 
     uint16_t bgColor = getStateBackgroundColor(state, state);
     
     // Clear area at the top (use state background)
-    M5Dial.Display.fillRect(0, 0, SCREEN_WIDTH, 35, bgColor);
+    M5Dial.Display.fillRect(0, 0, SCREEN_WIDTH, 45, bgColor);
     
     // Draw pomodoro count text at the top center (slightly lower)
     char pomoText[25];
-    snprintf(pomoText, sizeof(pomoText), "Pomodoros: %d", completedPomodoros);
+    snprintf(pomoText, sizeof(pomoText), "Sessions: %d", completedPomodoros);
     
     // Draw text at the top center - simple and visible
     M5Dial.Display.setTextColor(COLOR_TEXT);
-    M5Dial.Display.setTextSize(1);
     M5Dial.Display.setTextDatum(middle_center);
-    M5Dial.Display.drawString(pomoText, CENTER_X, 20); // Lowered from 15 to 20
+
+    if (loadUiFont("/fonts/RobotoRegularBold18.vlw")) {
+        M5Dial.Display.drawString(pomoText, CENTER_X, 35); // Positioned lower (was +35)
+        M5Dial.Display.unloadFont();
+    } else {
+        // Fallback to current built-in font behavior
+        M5Dial.Display.setTextSize(1);
+        M5Dial.Display.drawString(pomoText, CENTER_X, 35); // Lowered from 15 to 20
+    }
+
+
 }
 
 void Display::drawTomatoIcon(TimerState state) {
@@ -212,8 +271,17 @@ void Display::drawSettingsMenu(const PomodoroSettings& settings, uint8_t menuInd
     
     M5Dial.Display.setTextColor(COLOR_TEXT);
     M5Dial.Display.setTextDatum(top_center);
-    M5Dial.Display.setTextSize(2);
-    M5Dial.Display.drawString("Settings", CENTER_X, 10);
+
+    if (loadUiFont("/fonts/RobotoRegularBold18.vlw")) {
+        M5Dial.Display.drawString("Settings", CENTER_X, 15); 
+        M5Dial.Display.unloadFont();
+    } else {
+        // Fallback to current built-in font behavior
+        M5Dial.Display.setTextSize(2);
+        M5Dial.Display.drawString("Settings", CENTER_X, 15);
+    }
+
+   
     
     M5Dial.Display.setTextSize(1);
     int16_t yPos = 50;
@@ -236,7 +304,7 @@ void Display::drawSettingsMenu(const PomodoroSettings& settings, uint8_t menuInd
 
         // Draw highlight only for selected item
         if (i == menuIndex) {
-            M5Dial.Display.fillRect(10, yPos - 5, SCREEN_WIDTH - 20, 18, COLOR_PROGRESS_BG);
+            M5Dial.Display.fillRect(10, yPos - 3, SCREEN_WIDTH - 20, 20, COLOR_PROGRESS_BG);
             M5Dial.Display.setTextColor(COLOR_WORK);
         } else {
             M5Dial.Display.setTextColor(COLOR_TEXT);
@@ -262,17 +330,34 @@ void Display::drawSettingsMenu(const PomodoroSettings& settings, uint8_t menuInd
             // Back
             snprintf(line, sizeof(line), "%s", menuItems[i]);
         }
-
-        M5Dial.Display.drawString(line, CENTER_X, yPos);
+        if (loadUiFont("/fonts/RobotoRegular14.vlw")) {
+            M5Dial.Display.drawString(line, CENTER_X, yPos); 
+            M5Dial.Display.unloadFont();
+        } else {
+            // Fallback to current built-in font behavior
+            M5Dial.Display.drawString(line, CENTER_X, yPos);
+        }        
         yPos += 25;
     }
     
     // Instructions (clear area first) - moved higher to be fully visible
     M5Dial.Display.fillRect(0, SCREEN_HEIGHT - 45, SCREEN_WIDTH, 45, COLOR_BG);
     M5Dial.Display.setTextColor(COLOR_TEXT);
-    M5Dial.Display.setTextSize(1);
-    M5Dial.Display.drawString("Dial: Navigate/Adjust", CENTER_X, SCREEN_HEIGHT - 35);
-    M5Dial.Display.drawString("Press: Select/Edit", CENTER_X, SCREEN_HEIGHT - 20);
+    M5Dial.Display.drawLine(0, SCREEN_HEIGHT - 47, SCREEN_WIDTH, SCREEN_HEIGHT - 47, TFT_WHITE);
+
+    if (loadUiFont("/fonts/RobotoRegular12.vlw")) {
+        M5Dial.Display.drawString("Dial: Navigate/Adjust", CENTER_X, SCREEN_HEIGHT - 40);
+        M5Dial.Display.drawString("Press: Select/Edit", CENTER_X, SCREEN_HEIGHT - 26);
+        M5Dial.Display.unloadFont();
+    } else {
+        // Fallback to current built-in font behavior
+        M5Dial.Display.setTextSize(1);
+        M5Dial.Display.drawString("Dial: Navigate/Adjust", CENTER_X, SCREEN_HEIGHT - 40);
+        M5Dial.Display.drawString("Press: Select/Edit", CENTER_X, SCREEN_HEIGHT - 26);
+    }   
+
+
+    
 }
 
 String Display::formatTime(uint32_t seconds) {

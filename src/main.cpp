@@ -27,6 +27,7 @@ bool needsRedraw = true;
 uint32_t lastDisplayedSeconds = 0;
 TimerState lastDisplayedState = STATE_SETTINGS; // Initialize to different state to force first draw
 float lastDisplayedProgress = -1.0;
+uint8_t lastDisplayedPomodoros = 255;
 
 // Module instances
 Display display;
@@ -159,17 +160,24 @@ void loop() {
                 display.drawTimerDisplay(currentRemaining, display.getStateColor(currentState),
                                         currentState, currentDuration, currentRemaining,
                                         lastDisplayedState, lastDisplayedProgress);
-                display.drawStatusText(
-                    currentState == STATE_IDLE ? "Ready" :
-                    currentState == STATE_PAUSED ? "Paused" :
-                    currentState == STATE_RUNNING ? "Focusing" :
-                    currentState == STATE_SHORT_BREAK ? "Short Break" :
-                    "Long Break",
-                    display.getStateColor(currentState),
-                    currentState, lastDisplayedState
-                );
-                display.drawPomodoroCounter(completedPomodoros, currentState);
-                display.drawTomatoIcon(currentState);
+                if (currentState != lastDisplayedState) {                        
+                    display.drawStatusText(
+                        currentState == STATE_IDLE ? "Ready" :
+                        currentState == STATE_PAUSED ? "Paused" :
+                        currentState == STATE_RUNNING ? "Focusing" :
+                        currentState == STATE_SHORT_BREAK ? "Short Break" :
+                        "Long Break",
+                        display.getStateColor(currentState),
+                        currentState, lastDisplayedState
+                    );
+                }
+
+                if (completedPomodoros != lastDisplayedPomodoros || currentState != lastDisplayedState) {
+                    display.drawPomodoroCounter(completedPomodoros, currentState);
+                    lastDisplayedPomodoros = completedPomodoros;
+                }
+
+                // display.drawTomatoIcon(currentState);
                 break;
             case STATE_SETTINGS:
                 display.drawSettingsMenu(settings, settingsMenuIndex, settingsEditing, lastDisplayedState);

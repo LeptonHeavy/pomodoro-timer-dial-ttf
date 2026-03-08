@@ -37,6 +37,13 @@ private:
     void drawCircularProgress(float progress, uint16_t color, TimerState state);
     void drawCurvedText(const char* text, int16_t centerX, int16_t centerY, 
                        int16_t radius, float startAngle, uint16_t color);
+    bool loadUiFont(const char* path);
+
+    // Timer sprite
+    lgfx::LGFX_Sprite timerSprite;
+    bool timerSpriteReady = false;
+    void ensureTimerSprite();
+    
 };
 
 #endif // DISPLAY_H
