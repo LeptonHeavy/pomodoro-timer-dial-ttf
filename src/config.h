@@ -45,7 +45,7 @@ const uint16_t COLOR_TEXT = TFT_WHITE;
 const uint16_t COLOR_PROGRESS_BG = 0x2104; // Dark gray
 const uint16_t COLOR_WORK_BG = TFT_RED;    // Red background for pomodoro
 const uint16_t COLOR_SHORT_BREAK_BG = TFT_DARKGREEN; // Dark green background for short break
-const uint16_t COLOR_LONG_BREAK_BG = TFT_ORANGE; // Orange background for long break
+const uint16_t COLOR_LONG_BREAK_BG = 0xfc40; //TFT_ORANGE; // Orange background for long break
 
 #endif // CONFIG_H
 

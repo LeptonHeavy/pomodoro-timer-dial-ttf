@@ -38,12 +38,21 @@ private:
     uint32_t buttonPressTime;
     bool buttonPressed;
     bool longPressHandled;
+
     
     // Performance optimization - encoder debouncing
     uint32_t lastEncoderChangeTime;
     static constexpr uint32_t ENCODER_DEBOUNCE_MS = 10;  // Balanced for smoothness and responsiveness
     static constexpr int32_t ENCODER_THRESHOLD = 1;       // Minimum encoder delta to process
-    
+
+    // Settings menu navigation should move one item per physical detent
+    int32_t settingsMenuAccum;
+    static constexpr int32_t MENU_NAV_COUNTS_PER_DETENT = 4;
+
+    // Settings value editing should also move one step per physical detent
+    int32_t settingsEditAccum;
+    static constexpr int32_t MENU_EDIT_COUNTS_PER_DETENT = 4;
+
     // Internal handlers
     void handleEncoderInput(TimerState& currentState,
                            PomodoroSettings& settings,

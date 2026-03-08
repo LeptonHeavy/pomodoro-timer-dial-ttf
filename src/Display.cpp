@@ -6,7 +6,9 @@
 
 #include "Display.h"
 
-Display::Display() : timerSprite(&M5Dial.Display) {
+Display::Display()
+  : timerSprite(&M5Dial.Display),
+    settingsSprite(&M5Dial.Display) {
     // Constructor - nothing to initialize
 }
 
@@ -32,10 +34,28 @@ void Display::ensureTimerSprite() {
     }
     // Keep the timer font loaded in the sprite to avoid reloading it from SPIFFS
     // on every 1-second refresh.
-    if (!timerFontLoaded) {
+    if (timerSpriteReady && !timerFontLoaded) {
         timerFontLoaded = timerSprite.loadFont(SPIFFS, "/fonts/RobotoMonoBold72.vlw");
         if (!timerFontLoaded) {
-            Serial.println("Failed to load timer font");
+            Serial.println("Failed to load /fonts/RobotoMonoBold72.vlw");
+        }
+    }
+}
+
+// Similar to above the settings menu is rendered into an LGFX_Sprite before being pushed to the display.
+// This eliminates visible flicker caused by clearing and redrawing a large area.
+void Display::ensureSettingsSprite() {
+    if (!settingsSpriteReady) {
+        settingsSprite.setColorDepth(16);
+        settingsSprite.createSprite(SCREEN_WIDTH, 165);
+        settingsSprite.setTextDatum(top_center);
+        settingsSpriteReady = true;
+    }
+
+    if (settingsSpriteReady && !settingsFontLoaded) {
+        settingsFontLoaded = settingsSprite.loadFont(SPIFFS, "/fonts/RobotoRegular14.vlw");
+        if (!settingsFontLoaded) {
+            Serial.println("Failed to load /fonts/RobotoRegular14.vlw");
         }
     }
 }
@@ -232,12 +252,12 @@ void Display::drawPomodoroCounter(uint8_t completedPomodoros, TimerState state) 
     M5Dial.Display.setTextDatum(middle_center);
 
     if (loadUiFont("/fonts/RobotoRegularBold18.vlw")) {
-        M5Dial.Display.drawString(pomoText, CENTER_X, 35); // Positioned lower (was +35)
+        M5Dial.Display.drawString(pomoText, CENTER_X, 40); // Positioned lower (was +35)
         M5Dial.Display.unloadFont();
     } else {
         // Fallback to current built-in font behavior
         M5Dial.Display.setTextSize(1);
-        M5Dial.Display.drawString(pomoText, CENTER_X, 35); // Lowered from 15 to 20
+        M5Dial.Display.drawString(pomoText, CENTER_X, 40); // Lowered from 15 to 20
     }
 
 
@@ -291,10 +311,16 @@ void Display::drawSettingsMenu(const PomodoroSettings& settings, uint8_t menuInd
    
     
     M5Dial.Display.setTextSize(1);
-    int16_t yPos = 50;
     
-    // Clear the menu area before redrawing to remove old highlights
-    M5Dial.Display.fillRect(0, 40, SCREEN_WIDTH, 165, COLOR_BG);
+    ensureSettingsSprite();
+    settingsSprite.fillSprite(COLOR_BG);
+    settingsSprite.setTextDatum(top_center);
+
+    if (!settingsFontLoaded) {
+        settingsSprite.setTextSize(1);
+    }
+
+    int16_t yPos = 10;
 
     const char* menuItems[] = {
         "Work Duration",
@@ -306,46 +332,33 @@ void Display::drawSettingsMenu(const PomodoroSettings& settings, uint8_t menuInd
     };
 
     for (uint8_t i = 0; i < 6; i++) {
-        // Clear the specific line area first
-        M5Dial.Display.fillRect(10, yPos - 2, SCREEN_WIDTH - 20, 18, COLOR_BG);
-
-        // Draw highlight only for selected item
         if (i == menuIndex) {
-            M5Dial.Display.fillRect(10, yPos - 3, SCREEN_WIDTH - 20, 20, COLOR_PROGRESS_BG);
-            M5Dial.Display.setTextColor(COLOR_WORK);
+            settingsSprite.fillRect(10, yPos - 2, SCREEN_WIDTH - 20, 22, COLOR_PROGRESS_BG);
+            settingsSprite.setTextColor(COLOR_WORK, COLOR_PROGRESS_BG);
         } else {
-            M5Dial.Display.setTextColor(COLOR_TEXT);
+            settingsSprite.setTextColor(COLOR_TEXT, COLOR_BG);
         }
 
-        char line[50];
+        char line[60];
         if (i == 0) {
-            // Work Duration - editable
             snprintf(line, sizeof(line), "%s: %s", menuItems[i], formatTime(settings.workDuration).c_str());
         } else if (i == 1) {
-            // Short Break - editable
             snprintf(line, sizeof(line), "%s: %s", menuItems[i], formatTime(settings.shortBreakDuration).c_str());
         } else if (i == 2) {
-            // Long Break - editable
             snprintf(line, sizeof(line), "%s: %s", menuItems[i], formatTime(settings.longBreakDuration).c_str());
         } else if (i == 3) {
-            // Pomodoros until long break - editable
             snprintf(line, sizeof(line), "%s: %d", menuItems[i], settings.pomodorosUntilLongBreak);
         } else if (i == 4) {
-            // Brightness level - editable
             snprintf(line, sizeof(line), "%s: Level %d/6", menuItems[i], settings.brightnessLevel);
         } else {
-            // Back
             snprintf(line, sizeof(line), "%s", menuItems[i]);
         }
-        if (loadUiFont("/fonts/RobotoRegular14.vlw")) {
-            M5Dial.Display.drawString(line, CENTER_X, yPos); 
-            M5Dial.Display.unloadFont();
-        } else {
-            // Fallback to current built-in font behavior
-            M5Dial.Display.drawString(line, CENTER_X, yPos);
-        }        
+
+        settingsSprite.drawString(line, CENTER_X, yPos);
         yPos += 25;
     }
+
+    settingsSprite.pushSprite(0, 40);
     
     // Instructions (clear area first) - moved higher to be fully visible
     M5Dial.Display.fillRect(0, SCREEN_HEIGHT - 45, SCREEN_WIDTH, 45, COLOR_BG);

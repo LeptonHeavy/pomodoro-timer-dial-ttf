@@ -45,6 +45,12 @@ private:
     bool timerFontLoaded = false;
     void ensureTimerSprite();
 
+    // Settings menu sprite
+    lgfx::LGFX_Sprite settingsSprite;
+    bool settingsSpriteReady = false;
+    bool settingsFontLoaded = false;
+    void ensureSettingsSprite();
+
 };
 
 #endif // DISPLAY_H

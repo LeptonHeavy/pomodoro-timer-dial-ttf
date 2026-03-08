@@ -11,7 +11,9 @@ InputHandler::InputHandler()
       buttonPressTime(0),
       buttonPressed(false),
       longPressHandled(false),
-      lastEncoderChangeTime(0) {
+      lastEncoderChangeTime(0),
+      settingsMenuAccum(0),
+      settingsEditAccum(0) {
 }
 
 void InputHandler::init() {
@@ -51,81 +53,128 @@ void InputHandler::handleEncoderInput(TimerState& currentState,
                                      bool& needsRedraw) {
     long currentPos = M5Dial.Encoder.read();
     long delta = currentPos - lastEncoderPos;
-    
+
     // Performance optimization: Ignore small changes and debounce
     if (abs(delta) < ENCODER_THRESHOLD) return;
-    
+
     uint32_t now = millis();
     if (now - lastEncoderChangeTime < ENCODER_DEBOUNCE_MS) return;
-    
+
     lastEncoderPos = currentPos;
     lastEncoderChangeTime = now;
-    needsRedraw = true; // Mark that we need to redraw
-    
+
     if (currentState == STATE_SETTINGS) {
         if (settingsEditing) {
-            // Adjust current setting value
-            if (settingsMenuIndex == 0) {
-                // Work Duration (adjust by 60 seconds)
-                int32_t newVal = settings.workDuration + (delta * 60);
-                if (newVal < 60) newVal = 60;      // Minimum 1 minute
-                if (newVal > 3600) newVal = 3600;  // Maximum 60 minutes
-                settings.workDuration = newVal;
-            } else if (settingsMenuIndex == 1) {
-                // Short Break Duration (adjust by 60 seconds)
-                int32_t newVal = settings.shortBreakDuration + (delta * 60);
-                if (newVal < 60) newVal = 60;      // Minimum 1 minute
-                if (newVal > 3600) newVal = 3600;  // Maximum 60 minutes
-                settings.shortBreakDuration = newVal;
-            } else if (settingsMenuIndex == 2) {
-                // Long Break Duration (adjust by 60 seconds)
-                int32_t newVal = settings.longBreakDuration + (delta * 60);
-                if (newVal < 60) newVal = 60;      // Minimum 1 minute
-                if (newVal > 3600) newVal = 3600;  // Maximum 60 minutes
-                settings.longBreakDuration = newVal;
-            } else if (settingsMenuIndex == 3) {
-                // Pomodoros until long break (1-10 range)
-                int16_t newVal = settings.pomodorosUntilLongBreak + delta;
-                if (newVal < 1) newVal = 1;
-                if (newVal > 10) newVal = 10;
-                settings.pomodorosUntilLongBreak = newVal;
-            } else if (settingsMenuIndex == 4) {
-                // Brightness level (1-6 range)
-                int16_t newVal = settings.brightnessLevel + delta;
-                if (newVal < 1) newVal = 1;
-                if (newVal > 6) newVal = 6;
-                settings.brightnessLevel = newVal;
-                M5Dial.Display.setBrightness((settings.brightnessLevel * 255) / 6);
+            // Prevent stale navigation counts from affecting edit mode
+            settingsMenuAccum = 0;
+
+            // Edit setting: one physical detent = one value step
+            settingsEditAccum += delta;
+
+            int32_t step = 0;
+
+            while (settingsEditAccum >= MENU_EDIT_COUNTS_PER_DETENT) {
+                step++;
+                settingsEditAccum -= MENU_EDIT_COUNTS_PER_DETENT;
             }
+
+            while (settingsEditAccum <= -MENU_EDIT_COUNTS_PER_DETENT) {
+                step--;
+                settingsEditAccum += MENU_EDIT_COUNTS_PER_DETENT;
+            }
+
+            if (step != 0) {
+                if (settingsMenuIndex == 0) {
+                    int32_t newVal = (int32_t)settings.workDuration + (step * 60);
+                    if (newVal < 60) newVal = 60;
+                    if (newVal > 3600) newVal = 3600;
+                    settings.workDuration = newVal;
+
+                    // Keep Short Break in sync at 1/5 of Work Duration
+                    settings.shortBreakDuration = settings.workDuration / 5;
+                    settings.longBreakDuration = settings.workDuration;
+
+                } else if (settingsMenuIndex == 1) {
+                    int32_t newVal = (int32_t)settings.shortBreakDuration + (step * 60);
+                    if (newVal < 60) newVal = 60;
+                    if (newVal > 3600) newVal = 3600;
+                    settings.shortBreakDuration = newVal;
+
+                } else if (settingsMenuIndex == 2) {
+                    int32_t newVal = (int32_t)settings.longBreakDuration + (step * 60);
+                    if (newVal < 60) newVal = 60;
+                    if (newVal > 3600) newVal = 3600;
+                    settings.longBreakDuration = newVal;
+
+                } else if (settingsMenuIndex == 3) {
+                    int16_t newVal = (int16_t)settings.pomodorosUntilLongBreak + step;
+                    if (newVal < 1) newVal = 1;
+                    if (newVal > 10) newVal = 10;
+                    settings.pomodorosUntilLongBreak = newVal;
+
+                } else if (settingsMenuIndex == 4) {
+                    int16_t newVal = (int16_t)settings.brightnessLevel + step;
+                    if (newVal < 1) newVal = 1;
+                    if (newVal > 6) newVal = 6;
+                    settings.brightnessLevel = newVal;
+                    M5Dial.Display.setBrightness((settings.brightnessLevel * 255) / 6);
+                }
+
+                needsRedraw = true;
+            }
+
         } else {
-            // Navigate menu
-            if (delta > 0) {
+            // Prevent stale edit counts from affecting navigation mode
+            settingsEditAccum = 0;
+
+            // Navigate menu: one physical detent = one item move
+            settingsMenuAccum += delta;
+
+            bool moved = false;
+
+            while (settingsMenuAccum >= MENU_NAV_COUNTS_PER_DETENT) {
                 settingsMenuIndex = (settingsMenuIndex + 1) % 6;
-            } else {
+                settingsMenuAccum -= MENU_NAV_COUNTS_PER_DETENT;
+                moved = true;
+            }
+
+            while (settingsMenuAccum <= -MENU_NAV_COUNTS_PER_DETENT) {
                 settingsMenuIndex = (settingsMenuIndex + 5) % 6;
+                settingsMenuAccum += MENU_NAV_COUNTS_PER_DETENT;
+                moved = true;
+            }
+
+            if (moved) {
+                needsRedraw = true;
             }
         }
+
     } else if (currentState == STATE_IDLE) {
+        // Clear settings accumulators when not in settings
+        settingsMenuAccum = 0;
+        settingsEditAccum = 0;
+
         // In idle state, encoder adjusts pomodoro time (1-25 minutes)
         uint16_t currentMinutes = settings.workDuration / 60;
         int16_t newMinutes = currentMinutes + delta;
-        
+
         // Clamp between 1 and 25 minutes
         if (newMinutes < 1) newMinutes = 1;
         if (newMinutes > 25) newMinutes = 25;
-        
+
         // Only update if value actually changed
         if (newMinutes != currentMinutes) {
             settings.workDuration = newMinutes * 60;
             timerRemaining = settings.workDuration;
             timerDuration = settings.workDuration;
-            
+
             // When dial is used, automatically calculate breaks using 1/5 rule
             settings.shortBreakDuration = settings.workDuration / 5;
             settings.longBreakDuration = settings.workDuration;
-            
+
             // Play click sound when adjusting time
-            M5Dial.Speaker.tone(800, 30); // Short click sound (800 Hz, 30ms)
+            M5Dial.Speaker.tone(800, 30);
+            needsRedraw = true;
         }
     }
 }
@@ -249,6 +298,9 @@ void InputHandler::handleButtonPress(TimerState& currentState,
                 uint16_t bgColor = COLOR_WORK_BG; // Red background for idle
                 M5Dial.Display.fillScreen(bgColor);
                 currentState = STATE_IDLE;
+                settingsMenuAccum = 0;
+                settingsEditAccum = 0;
+                lastEncoderPos = M5Dial.Encoder.read();
                 if (resetTimerCallback) {
                     resetTimerCallback();
                 }
@@ -257,6 +309,10 @@ void InputHandler::handleButtonPress(TimerState& currentState,
             } else if (settingsMenuIndex >= 0 && settingsMenuIndex <= 4) {
                 // Allow editing all settings: Work Duration, Short Break, Long Break, Pomodoros/Long, Brightness
                 settingsEditing = !settingsEditing;
+                settingsMenuAccum = 0;
+                settingsEditAccum = 0;
+                lastEncoderPos = M5Dial.Encoder.read();
+                needsRedraw = true;
             }
             break;
     }
