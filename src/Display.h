@@ -42,8 +42,9 @@ private:
     // Timer sprite
     lgfx::LGFX_Sprite timerSprite;
     bool timerSpriteReady = false;
+    bool timerFontLoaded = false;
     void ensureTimerSprite();
-    
+
 };
 
 #endif // DISPLAY_H

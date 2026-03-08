@@ -20,15 +20,24 @@ bool Display::loadUiFont(const char* path) {
     return M5Dial.Display.loadFont(SPIFFS, path);
 }
 
+// Timer is rendered into an LGFX_Sprite before being pushed to the display.
+// This eliminates visible flicker caused by clearing and redrawing large
+// smooth fonts directly on the LCD each second.
 void Display::ensureTimerSprite() {
-    if (timerSpriteReady) {
-        return;
+    if (!timerSpriteReady) {
+        timerSprite.setColorDepth(16);
+        timerSprite.createSprite(220, 80);
+        timerSprite.setTextDatum(middle_center);
+        timerSpriteReady = true;
     }
-
-    timerSprite.setColorDepth(16);
-    timerSprite.createSprite(220, 80);   
-    timerSprite.setTextDatum(middle_center);
-    timerSpriteReady = true;
+    // Keep the timer font loaded in the sprite to avoid reloading it from SPIFFS
+    // on every 1-second refresh.
+    if (!timerFontLoaded) {
+        timerFontLoaded = timerSprite.loadFont(SPIFFS, "/fonts/RobotoMonoBold72.vlw");
+        if (!timerFontLoaded) {
+            Serial.println("Failed to load timer font");
+        }
+    }
 }
 
 void Display::drawCircularProgress(float progress, uint16_t color, TimerState state) {
@@ -79,11 +88,9 @@ void Display::drawTimerDisplay(uint32_t seconds, uint16_t color, TimerState stat
     timerSprite.setTextColor(COLOR_TEXT, bgColor);
     timerSprite.setTextDatum(middle_center);
 
-    if (timerSprite.loadFont(SPIFFS, "/fonts/RobotoMonoBold72.vlw")) {
+    if (timerFontLoaded) {
         timerSprite.drawString(formatTime(seconds).c_str(), 110, 40);
-        timerSprite.unloadFont();
     } else {
-        // Fallback to current built-in font behavior
         timerSprite.setTextSize(5);
         timerSprite.drawString(formatTime(seconds).c_str(), 110, 50);
     }

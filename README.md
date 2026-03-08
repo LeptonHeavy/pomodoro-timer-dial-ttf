@@ -12,6 +12,19 @@ A modular, customizable and efficient Pomodoro timer implementation for the M5St
 ![short break image](docs/images/shortbreak.JPEG)
 ![long break image](docs/images/longbreak.JPEG)
 
+## Fork Information
+
+This project is a fork of:
+
+https://github.com/sfrechette/pomodoro-timer-dial
+
+Changes in this fork include:
+
+- VLW font support
+- Smooth font rendering
+- Sprite-based timer rendering to eliminate flicker
+- Removal of tomato icon
+- UI layout adjustments, mostly larger type for the bifocal/trifocal crowd ;)
 
 ## Features
 
