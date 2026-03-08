@@ -14,6 +14,7 @@ InputHandler::InputHandler()
       lastEncoderChangeTime(0),
       settingsMenuAccum(0),
       settingsEditAccum(0),
+      idleAdjustAccum(0),
       lastUserActivityTime(0),
       screenDimmed(false) {
 }
@@ -157,33 +158,51 @@ void InputHandler::handleEncoderInput(TimerState& currentState,
             }
         }
 
-    } else if (currentState == STATE_IDLE) {
+        } else if (currentState == STATE_IDLE) {
         // Clear settings accumulators when not in settings
         settingsMenuAccum = 0;
         settingsEditAccum = 0;
 
-        // In idle state, encoder adjusts pomodoro time (1-25 minutes)
-        uint16_t currentMinutes = settings.workDuration / 60;
-        int16_t newMinutes = currentMinutes + delta;
+        // Idle timer adjustment should also be one step per physical detent
+        idleAdjustAccum += delta;
 
-        // Clamp between 1 and 25 minutes
-        if (newMinutes < 1) newMinutes = 1;
-        if (newMinutes > 25) newMinutes = 25;
+        int32_t step = 0;
 
-        // Only update if value actually changed
-        if (newMinutes != currentMinutes) {
-            settings.workDuration = newMinutes * 60;
-            timerRemaining = settings.workDuration;
-            timerDuration = settings.workDuration;
-
-            // When dial is used, automatically calculate breaks using 1/5 rule
-            settings.shortBreakDuration = settings.workDuration / 5;
-            settings.longBreakDuration = settings.workDuration;
-
-            // Play click sound when adjusting time
-            M5Dial.Speaker.tone(800, 30);
-            needsRedraw = true;
+        while (idleAdjustAccum >= IDLE_ADJUST_COUNTS_PER_DETENT) {
+            step++;
+            idleAdjustAccum -= IDLE_ADJUST_COUNTS_PER_DETENT;
         }
+
+        while (idleAdjustAccum <= -IDLE_ADJUST_COUNTS_PER_DETENT) {
+            step--;
+            idleAdjustAccum += IDLE_ADJUST_COUNTS_PER_DETENT;
+        }
+
+        if (step != 0) {
+            uint16_t currentMinutes = settings.workDuration / 60;
+            int16_t newMinutes = currentMinutes + step;
+
+            if (newMinutes < 1) newMinutes = 1;
+            if (newMinutes > 25) newMinutes = 25;
+
+            if (newMinutes != currentMinutes) {
+                settings.workDuration = newMinutes * 60;
+                timerRemaining = settings.workDuration;
+                timerDuration = settings.workDuration;
+
+                // When dial is used, automatically calculate breaks using 1/5 rule
+                settings.shortBreakDuration = settings.workDuration / 5;
+                settings.longBreakDuration = settings.workDuration;
+
+                M5Dial.Speaker.tone(800, 30);
+                needsRedraw = true;
+            }
+        }
+    } else {
+        // Clear accumulators in other states
+        settingsMenuAccum = 0;
+        settingsEditAccum = 0;
+        idleAdjustAccum = 0;
     }
 }
 

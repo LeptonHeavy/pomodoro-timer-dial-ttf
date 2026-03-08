@@ -53,6 +53,10 @@ private:
     int32_t settingsEditAccum;
     static constexpr int32_t MENU_EDIT_COUNTS_PER_DETENT = 4;
 
+    // Idle time adjust
+    int32_t idleAdjustAccum;
+    static constexpr int32_t IDLE_ADJUST_COUNTS_PER_DETENT = 4;
+
     // Inactivity dimming
     uint32_t lastUserActivityTime;
     bool screenDimmed;
