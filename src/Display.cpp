@@ -326,14 +326,14 @@ void Display::drawSettingsMenu(const PomodoroSettings& settings, uint8_t menuInd
         "Work Duration",
         "Short Break",
         "Long Break",
-        "Pomodoros/Long",
+        "Sessions/Long",
         "Brightness",
         "Back"
     };
 
     for (uint8_t i = 0; i < 6; i++) {
         if (i == menuIndex) {
-            settingsSprite.fillRect(10, yPos - 2, SCREEN_WIDTH - 20, 22, COLOR_PROGRESS_BG);
+            settingsSprite.fillRect(10, yPos - 4, SCREEN_WIDTH - 20, 22, COLOR_PROGRESS_BG);
             settingsSprite.setTextColor(COLOR_WORK, COLOR_PROGRESS_BG);
         } else {
             settingsSprite.setTextColor(COLOR_TEXT, COLOR_BG);
@@ -429,4 +429,3 @@ uint16_t Display::getStateBackgroundColor(TimerState state, TimerState stateBefo
             return COLOR_WORK_BG; // Red background for idle (default)
     }
 }
-

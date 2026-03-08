@@ -20,7 +20,7 @@ https://github.com/sfrechette/pomodoro-timer-dial
 
 Changes in this fork include:
 
-- VLW font support
+- VLW font support. TTF -> VLW conversion done with VLW Font Converter (https://vlw-font-creator.m5stack.com/)
 - Smooth font rendering
 - Sprite-based timer rendering to eliminate flicker
 - Removal of tomato icon

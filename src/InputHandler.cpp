@@ -13,12 +13,16 @@ InputHandler::InputHandler()
       longPressHandled(false),
       lastEncoderChangeTime(0),
       settingsMenuAccum(0),
-      settingsEditAccum(0) {
+      settingsEditAccum(0),
+      lastUserActivityTime(0),
+      screenDimmed(false) {
 }
 
 void InputHandler::init() {
     // Initialize encoder position
     lastEncoderPos = M5Dial.Encoder.read();
+    lastUserActivityTime = millis();
+    screenDimmed = false;
 }
 
 void InputHandler::processInput(TimerState& currentState,
@@ -41,7 +45,10 @@ void InputHandler::processInput(TimerState& currentState,
                      startTimerCallback, pauseTimerCallback, resumeTimerCallback, resetTimerCallback);
     
     // Handle touch input
-    handleTouchInput(currentState, settingsMenuIndex, settingsEditing, needsRedraw);
+    handleTouchInput(currentState, settings, settingsMenuIndex, settingsEditing, needsRedraw);
+
+    // Update idle-time dimming behavior
+    updateScreenDimming(currentState, settings);
 }
 
 void InputHandler::handleEncoderInput(TimerState& currentState,
@@ -62,6 +69,7 @@ void InputHandler::handleEncoderInput(TimerState& currentState,
 
     lastEncoderPos = currentPos;
     lastEncoderChangeTime = now;
+    noteUserActivity(settings); // Reset dimming timer on encoder activity
 
     if (currentState == STATE_SETTINGS) {
         if (settingsEditing) {
@@ -193,6 +201,7 @@ void InputHandler::handleButtonInput(TimerState& currentState,
             buttonPressed = true;
             longPressHandled = false;
             buttonPressTime = millis();
+            noteUserActivity(settings);
         } else {
             uint32_t pressDuration = millis() - buttonPressTime;
             
@@ -232,20 +241,19 @@ void InputHandler::handleButtonInput(TimerState& currentState,
 }
 
 void InputHandler::handleTouchInput(TimerState& currentState,
+                                   PomodoroSettings& settings,
                                    uint8_t& settingsMenuIndex,
                                    bool& settingsEditing,
                                    bool& needsRedraw) {
     auto touch = M5Dial.Touch.getDetail();
     if (touch.wasPressed()) {
+        noteUserActivity(settings);
+
         int16_t touchX = touch.x;
         int16_t touchY = touch.y;
-        
-        // Check if touch is in the gear icon area (bottom center)
-        // Increased touch area for better responsiveness: 40x40 pixel area
-        // Gear is at bottom: x = CENTER_X-20 to CENTER_X+20, y = SCREEN_HEIGHT-45 to SCREEN_HEIGHT
+
         if (touchX >= CENTER_X - 20 && touchX <= CENTER_X + 20 &&
             touchY >= SCREEN_HEIGHT - 45 && touchY <= SCREEN_HEIGHT) {
-            // Touch on gear icon = open settings
             if (currentState != STATE_SETTINGS) {
                 currentState = STATE_SETTINGS;
                 settingsMenuIndex = 0;
@@ -315,5 +323,40 @@ void InputHandler::handleButtonPress(TimerState& currentState,
                 needsRedraw = true;
             }
             break;
+    }
+}
+void InputHandler::noteUserActivity(const PomodoroSettings& settings) {
+    lastUserActivityTime = millis();
+
+    if (screenDimmed) {
+        M5Dial.Display.setBrightness((settings.brightnessLevel * 255) / 6);
+        screenDimmed = false;
+    }
+}
+
+void InputHandler::updateScreenDimming(TimerState currentState, const PomodoroSettings& settings) {
+    // Timer-related screens should always stay at user-selected brightness
+    bool forceNormalBrightness =
+        (currentState == STATE_RUNNING) ||
+        (currentState == STATE_PAUSED) ||
+        (currentState == STATE_SHORT_BREAK) ||
+        (currentState == STATE_LONG_BREAK);
+
+    if (forceNormalBrightness) {
+        if (screenDimmed) {
+            M5Dial.Display.setBrightness((settings.brightnessLevel * 255) / 6);
+            screenDimmed = false;
+        }
+        lastUserActivityTime = millis();
+        return;
+    }
+
+    // Idle and Settings screens may dim after inactivity
+    if (currentState == STATE_IDLE || currentState == STATE_SETTINGS) {
+        uint32_t now = millis();
+        if (!screenDimmed && (now - lastUserActivityTime >= DIM_TIMEOUT_MS)) {
+            M5Dial.Display.setBrightness((DIM_BRIGHTNESS_LEVEL * 255) / 6);
+            screenDimmed = true;
+        }
     }
 }

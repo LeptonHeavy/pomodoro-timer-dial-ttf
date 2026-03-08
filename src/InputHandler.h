@@ -53,6 +53,16 @@ private:
     int32_t settingsEditAccum;
     static constexpr int32_t MENU_EDIT_COUNTS_PER_DETENT = 4;
 
+    // Inactivity dimming
+    uint32_t lastUserActivityTime;
+    bool screenDimmed;
+
+    static constexpr uint32_t DIM_TIMEOUT_MS = 5000;
+    static constexpr uint8_t DIM_BRIGHTNESS_LEVEL = 1;
+
+    void noteUserActivity(const PomodoroSettings& settings);
+    void updateScreenDimming(TimerState currentState, const PomodoroSettings& settings);
+
     // Internal handlers
     void handleEncoderInput(TimerState& currentState,
                            PomodoroSettings& settings,
@@ -73,6 +83,7 @@ private:
                           void (*resetTimerCallback)());
     
     void handleTouchInput(TimerState& currentState,
+                         PomodoroSettings& settings,
                          uint8_t& settingsMenuIndex,
                          bool& settingsEditing,
                          bool& needsRedraw);
