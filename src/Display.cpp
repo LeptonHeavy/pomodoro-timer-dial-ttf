@@ -332,26 +332,39 @@ void Display::drawSettingsMenu(const PomodoroSettings& settings, uint8_t menuInd
     };
 
     for (uint8_t i = 0; i < 6; i++) {
-        if (i == menuIndex) {
+                if (i == menuIndex) {
             settingsSprite.fillRect(10, yPos - 4, SCREEN_WIDTH - 20, 22, COLOR_PROGRESS_BG);
-            settingsSprite.setTextColor(COLOR_WORK, COLOR_PROGRESS_BG);
+
+            if (editing) {
+                settingsSprite.setTextColor(TFT_ORANGE, COLOR_PROGRESS_BG);
+            } else {
+                settingsSprite.setTextColor(COLOR_WORK, COLOR_PROGRESS_BG);
+            }
         } else {
             settingsSprite.setTextColor(COLOR_TEXT, COLOR_BG);
         }
 
-        char line[60];
+        char baseLine[60];
+        char line[70];
+
         if (i == 0) {
-            snprintf(line, sizeof(line), "%s: %s", menuItems[i], formatTime(settings.workDuration).c_str());
+            snprintf(baseLine, sizeof(baseLine), "%s: %s", menuItems[i], formatTime(settings.workDuration).c_str());
         } else if (i == 1) {
-            snprintf(line, sizeof(line), "%s: %s", menuItems[i], formatTime(settings.shortBreakDuration).c_str());
+            snprintf(baseLine, sizeof(baseLine), "%s: %s", menuItems[i], formatTime(settings.shortBreakDuration).c_str());
         } else if (i == 2) {
-            snprintf(line, sizeof(line), "%s: %s", menuItems[i], formatTime(settings.longBreakDuration).c_str());
+            snprintf(baseLine, sizeof(baseLine), "%s: %s", menuItems[i], formatTime(settings.longBreakDuration).c_str());
         } else if (i == 3) {
-            snprintf(line, sizeof(line), "%s: %d", menuItems[i], settings.pomodorosUntilLongBreak);
+            snprintf(baseLine, sizeof(baseLine), "%s: %d", menuItems[i], settings.pomodorosUntilLongBreak);
         } else if (i == 4) {
-            snprintf(line, sizeof(line), "%s: Level %d/6", menuItems[i], settings.brightnessLevel);
+            snprintf(baseLine, sizeof(baseLine), "%s: Level %d/6", menuItems[i], settings.brightnessLevel);
         } else {
-            snprintf(line, sizeof(line), "%s", menuItems[i]);
+            snprintf(baseLine, sizeof(baseLine), "%s", menuItems[i]);
+        }
+
+        if (editing && i == menuIndex && i != 5) {
+            snprintf(line, sizeof(line), "-- %s --", baseLine);
+        } else {
+            snprintf(line, sizeof(line), "%s", baseLine);
         }
 
         settingsSprite.drawString(line, CENTER_X, yPos);
