@@ -8,7 +8,7 @@
 #include "Display.h"
 #include "InputHandler.h"
 #include "TimerManager.h"
-
+#include <Preferences.h>
 
 // Global Variables
 TimerState currentState = STATE_IDLE;
@@ -17,8 +17,14 @@ PomodoroSettings settings = {
     .shortBreakDuration = 5 * 60,      // 5 minutes
     .longBreakDuration = 25 * 60,      // 25 minutes
     .pomodorosUntilLongBreak = 4,
-    .brightnessLevel = 3               // Mid brightness (level 3 of 6)
+    .brightnessLevel = 3,               // Mid brightness (level 3 of 6)
+    .screenSaverTimeout = 5
 };
+
+Preferences preferences;
+PomodoroSettings savedSettings;
+uint32_t lastSettingsChange = 0;
+bool settingsSavePending = false;
 
 uint8_t completedPomodoros = 0;
 uint8_t settingsMenuIndex = 0;
@@ -28,6 +34,7 @@ uint32_t lastDisplayedSeconds = 0;
 TimerState lastDisplayedState = STATE_SETTINGS; // Initialize to different state to force first draw
 float lastDisplayedProgress = -1.0;
 uint8_t lastDisplayedPomodoros = 255;
+uint16_t screenSaverTimeout;  // Minutes; 0 = Off, default = 5
 
 // Module instances
 Display display;
@@ -40,6 +47,94 @@ void pauseTimer();
 void resumeTimer();
 void resetTimer();
 
+void printRtcDateTime() {
+    auto dt = M5Dial.Rtc.getDateTime();
+
+    Serial.printf(
+        "RTC: %04d-%02d-%02d %02d:%02d:%02d\n",
+        dt.date.year,
+        dt.date.month,
+        dt.date.date,
+        dt.time.hours,
+        dt.time.minutes,
+        dt.time.seconds
+    );
+}
+
+bool settingsDiffer(const PomodoroSettings& a,
+                    const PomodoroSettings& b) {
+    return a.workDuration != b.workDuration ||
+           a.shortBreakDuration != b.shortBreakDuration ||
+           a.longBreakDuration != b.longBreakDuration ||
+           a.pomodorosUntilLongBreak != b.pomodorosUntilLongBreak ||
+           a.brightnessLevel != b.brightnessLevel ||
+           a.screenSaverTimeout != b.screenSaverTimeout;
+}
+
+void loadSettings() {
+    preferences.begin("pomodoro", true);
+
+    settings.workDuration =
+        preferences.getUShort("work", settings.workDuration);
+    settings.shortBreakDuration =
+        preferences.getUShort("short", settings.shortBreakDuration);
+    settings.longBreakDuration =
+        preferences.getUShort("long", settings.longBreakDuration);
+    settings.pomodorosUntilLongBreak =
+        preferences.getUChar("sessions", settings.pomodorosUntilLongBreak);
+    settings.brightnessLevel =
+        preferences.getUChar("brightness", settings.brightnessLevel);
+    settings.screenSaverTimeout =
+        preferences.getUShort("saver", settings.screenSaverTimeout);
+
+    preferences.end();
+
+    // Reject invalid stored values.
+    if (settings.workDuration < 60 || settings.workDuration > 3600)
+        settings.workDuration = 1500;
+
+    if (settings.shortBreakDuration < 60 || settings.shortBreakDuration > 3600)
+        settings.shortBreakDuration = 300;
+
+    if (settings.longBreakDuration < 60 || settings.longBreakDuration > 3600)
+        settings.longBreakDuration = 1500;
+
+    if (settings.pomodorosUntilLongBreak < 1 ||
+        settings.pomodorosUntilLongBreak > 10)
+        settings.pomodorosUntilLongBreak = 4;
+
+    if (settings.brightnessLevel < 1 || settings.brightnessLevel > 6)
+        settings.brightnessLevel = 3;
+
+    if (settings.screenSaverTimeout > 60)
+        settings.screenSaverTimeout = 5;
+
+    savedSettings = settings;
+
+    Serial.println("Settings loaded from NVS");
+}
+
+void saveSettings() {
+    if (!preferences.begin("pomodoro", false)) {
+        Serial.println("Failed to open NVS for writing");
+        return;
+    }
+
+    preferences.putUShort("work", settings.workDuration);
+    preferences.putUShort("short", settings.shortBreakDuration);
+    preferences.putUShort("long", settings.longBreakDuration);
+    preferences.putUChar("sessions", settings.pomodorosUntilLongBreak);
+    preferences.putUChar("brightness", settings.brightnessLevel);
+    preferences.putUShort("saver", settings.screenSaverTimeout);
+
+    preferences.end();
+
+    savedSettings = settings;
+    settingsSavePending = false;
+
+    Serial.println("Settings saved to NVS");
+}
+
 void setup() {
     Serial.begin(115200);
     delay(1000); // Wait for serial to initialize
@@ -49,7 +144,25 @@ void setup() {
     
     auto cfg = M5.config();
     M5Dial.begin(cfg, true, true);
+    loadSettings();
+
+    Serial.println("RTC diagnostic:");
+    m5::rtc_datetime_t dt;
+
+dt.date.year = 2026;
+dt.date.month = 11;
+dt.date.date = 5;
+
+dt.time.hours = 21;
+dt.time.minutes = 55;
+dt.time.seconds = 0;
+
+M5Dial.Rtc.setDateTime(dt);
+
+Serial.println("RTC initialized:");
+    printRtcDateTime();
     
+
     // Initialize SPIFFS for image loading
     if (!SPIFFS.begin(true)) {
         Serial.println("SPIFFS Mount Failed");
@@ -83,6 +196,12 @@ void setup() {
 void loop() {
     M5Dial.update();
     
+    static uint32_t lastRtcReport = 0;
+
+    if (millis() - lastRtcReport >= 10000) {
+        lastRtcReport = millis();
+        printRtcDateTime();
+    }
     // Performance monitoring (optional debug mode)
     #if ENABLE_PERFORMANCE_MONITOR
     static uint32_t loopCount = 0;
@@ -103,7 +222,25 @@ void loop() {
     inputHandler.processInput(currentState, settings, settingsMenuIndex, settingsEditing,
                               timerRemaining, timerDuration, needsRedraw,
                               startTimer, pauseTimer, resumeTimer, resetTimer);
-    
+                              
+    // Save changed settings after 1.5 seconds without further changes.    
+    static PomodoroSettings lastObservedSettings = settings;
+
+    if (settingsDiffer(settings, lastObservedSettings)) {
+        lastObservedSettings = settings;
+        lastSettingsChange = millis();
+        settingsSavePending = true;
+    }
+
+    if (settingsSavePending &&
+        millis() - lastSettingsChange >= 1500) {
+        if (settingsDiffer(settings, savedSettings)) {
+            saveSettings();
+        } else {
+            settingsSavePending = false;
+        }
+    }
+
     // Only sync back if we're in IDLE state (encoder adjustments)
     // If reset happened (state changed to IDLE), re-read values instead
     if (currentState == STATE_IDLE && oldState == STATE_IDLE) {
