@@ -3,12 +3,12 @@
 #include <math.h>
 #include <string.h>
 #include <SPIFFS.h>
+#include <Preferences.h>
 #include "config.h"
 #include "types.h"
 #include "Display.h"
 #include "InputHandler.h"
 #include "TimerManager.h"
-#include <Preferences.h>
 
 // Global Variables
 TimerState currentState = STATE_IDLE;
@@ -34,7 +34,6 @@ uint32_t lastDisplayedSeconds = 0;
 TimerState lastDisplayedState = STATE_SETTINGS; // Initialize to different state to force first draw
 float lastDisplayedProgress = -1.0;
 uint8_t lastDisplayedPomodoros = 255;
-uint16_t screenSaverTimeout;  // Minutes; 0 = Off, default = 5
 
 // Module instances
 Display display;
@@ -222,7 +221,7 @@ void loop() {
     inputHandler.processInput(currentState, settings, settingsMenuIndex, settingsEditing,
                               timerRemaining, timerDuration, needsRedraw,
                               startTimer, pauseTimer, resumeTimer, resetTimer);
-                              
+
     // Save changed settings after 1.5 seconds without further changes.    
     static PomodoroSettings lastObservedSettings = settings;
 
