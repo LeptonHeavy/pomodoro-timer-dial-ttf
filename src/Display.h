@@ -17,6 +17,8 @@ public:
     // Constructor
     Display();
     
+    void drawClockScreen(const m5::rtc_datetime_t& dateTime);
+    
     // Main drawing functions
     void drawTimerDisplay(uint32_t seconds, uint16_t color, TimerState state, 
                          uint32_t duration, uint32_t remaining, 

@@ -18,7 +18,7 @@ PomodoroSettings settings = {
     .longBreakDuration = 25 * 60,      // 25 minutes
     .pomodorosUntilLongBreak = 4,
     .brightnessLevel = 3,               // Mid brightness (level 3 of 6)
-    .screenSaverTimeout = 5
+    .screenSaverTimeout = 1
 };
 
 Preferences preferences;
@@ -30,6 +30,8 @@ uint8_t completedPomodoros = 0;
 uint8_t settingsMenuIndex = 0;
 bool settingsEditing = false;
 bool needsRedraw = true;
+bool screenSaverActive = false;
+uint32_t lastClockDraw = 0;
 uint32_t lastDisplayedSeconds = 0;
 TimerState lastDisplayedState = STATE_SETTINGS; // Initialize to different state to force first draw
 float lastDisplayedProgress = -1.0;
@@ -146,19 +148,6 @@ void setup() {
     loadSettings();
 
     Serial.println("RTC diagnostic:");
-    m5::rtc_datetime_t dt;
-
-dt.date.year = 2026;
-dt.date.month = 11;
-dt.date.date = 5;
-
-dt.time.hours = 21;
-dt.time.minutes = 55;
-dt.time.seconds = 0;
-
-M5Dial.Rtc.setDateTime(dt);
-
-Serial.println("RTC initialized:");
     printRtcDateTime();
     
 
@@ -190,11 +179,66 @@ Serial.println("RTC initialized:");
     // Draw initial screen
     needsRedraw = true;
     resetTimer();
+
 }
 
 void loop() {
     M5Dial.update();
-    
+
+    // Process screen saver wake-up before normal timer input.
+    if (inputHandler.processScreenSaverWake(screenSaverActive, settings)) {
+        if (!screenSaverActive) {
+            // Restore the complete timer screen after waking.
+            needsRedraw = true;
+            lastDisplayedState = STATE_SETTINGS;
+            lastDisplayedProgress = -1.0f;
+            lastDisplayedPomodoros = 255;
+        } else {
+            // Update the clock once per second.
+            if (millis() - lastClockDraw >= 1000) {
+                lastClockDraw = millis();
+                display.drawClockScreen(M5Dial.Rtc.getDateTime());
+            }
+        }
+
+        if (screenSaverActive) {
+            delay(10);
+            return;
+        }
+
+        // Wake-up input was consumed. Allow normal display restoration
+        // without processing the same input again.
+        uint32_t remaining = timerManager.getRemaining();
+        uint32_t duration = timerManager.getDuration();
+
+        display.drawTimerDisplay(
+            remaining,
+            display.getStateColor(currentState),
+            currentState,
+            duration,
+            remaining,
+            STATE_SETTINGS,
+            lastDisplayedProgress
+        );
+
+        display.drawStatusText(
+            "Ready",
+            display.getStateColor(currentState),
+            currentState,
+            STATE_SETTINGS
+        );
+
+        display.drawPomodoroCounter(completedPomodoros, currentState);
+
+        lastDisplayedSeconds = remaining;
+        lastDisplayedState = currentState;
+        lastDisplayedPomodoros = completedPomodoros;
+        needsRedraw = false;
+
+        delay(10);
+        return;
+    }
+
     static uint32_t lastRtcReport = 0;
 
     if (millis() - lastRtcReport >= 10000) {
@@ -221,6 +265,18 @@ void loop() {
     inputHandler.processInput(currentState, settings, settingsMenuIndex, settingsEditing,
                               timerRemaining, timerDuration, needsRedraw,
                               startTimer, pauseTimer, resumeTimer, resetTimer);
+
+    // Activate the clock after the configured idle timeout.
+    if (inputHandler.shouldActivateScreenSaver(currentState, settings)) {
+        screenSaverActive = true;
+        lastClockDraw = millis();
+
+        display.drawClockScreen(M5Dial.Rtc.getDateTime());
+
+        Serial.println("Screen saver activated");
+        delay(10);
+        return;
+    }
 
     // Save changed settings after 1.5 seconds without further changes.    
     static PomodoroSettings lastObservedSettings = settings;

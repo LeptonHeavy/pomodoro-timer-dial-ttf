@@ -18,7 +18,13 @@ public:
     
     // Initialize input handler
     void init();
-    
+
+    bool shouldActivateScreenSaver(TimerState currentState,
+                                   const PomodoroSettings& settings) const;
+
+    bool processScreenSaverWake(bool& screenSaverActive,
+                                const PomodoroSettings& settings);
+
     // Main input processing function (call from loop)
     void processInput(TimerState& currentState, 
                      PomodoroSettings& settings,
@@ -60,7 +66,8 @@ private:
     // Inactivity dimming
     uint32_t lastUserActivityTime;
     bool screenDimmed;
-
+    bool suppressButtonUntilRelease;
+    bool suppressTouchUntilRelease;
     static constexpr uint32_t DIM_TIMEOUT_MS = 5000;
     static constexpr uint8_t DIM_BRIGHTNESS_LEVEL = 1;
 

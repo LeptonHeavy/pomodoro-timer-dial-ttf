@@ -12,6 +12,55 @@ Display::Display()
     // Constructor - nothing to initialize
 }
 
+void Display::drawClockScreen(const m5::rtc_datetime_t& dateTime) {
+    const uint16_t bgColor = TFT_BLACK;
+    const uint16_t fgColor = TFT_WHITE;
+
+    M5Dial.Display.fillScreen(bgColor);
+    M5Dial.Display.setTextColor(fgColor, bgColor);
+    M5Dial.Display.setTextDatum(middle_center);
+
+    char timeText[12];
+    snprintf(timeText, sizeof(timeText),
+             "%02u:%02u:%02u",
+             dateTime.time.hours,
+             dateTime.time.minutes,
+             dateTime.time.seconds);
+
+    // Large time display
+    if (loadUiFont("/fonts/RobotoMonoBold72.vlw")) {
+        // This font is too large for HH:MM:SS on a 240px display,
+        // so display hours and minutes using the large font.
+        char shortTime[6];
+        snprintf(shortTime, sizeof(shortTime),
+                 "%02u:%02u",
+                 dateTime.time.hours,
+                 dateTime.time.minutes);
+
+        M5Dial.Display.drawString(shortTime, CENTER_X, CENTER_Y - 20);
+        M5Dial.Display.unloadFont();
+    } else {
+        M5Dial.Display.setTextSize(4);
+        M5Dial.Display.drawString(timeText, CENTER_X, CENTER_Y - 20);
+    }
+
+    // Date display
+    char dateText[20];
+    snprintf(dateText, sizeof(dateText),
+             "%04u-%02u-%02u",
+             dateTime.date.year,
+             dateTime.date.month,
+             dateTime.date.date);
+
+    if (loadUiFont("/fonts/RobotoRegularBold20.vlw")) {
+        M5Dial.Display.drawString(dateText, CENTER_X, CENTER_Y + 45);
+        M5Dial.Display.unloadFont();
+    } else {
+        M5Dial.Display.setTextSize(2);
+        M5Dial.Display.drawString(dateText, CENTER_X, CENTER_Y + 45);
+    }
+}
+
 bool Display::loadUiFont(const char* path) {
     if (!SPIFFS.exists(path)) {
         Serial.print("Missing font file: ");

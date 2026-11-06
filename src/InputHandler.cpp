@@ -16,7 +16,9 @@ InputHandler::InputHandler()
       settingsEditAccum(0),
       idleAdjustAccum(0),
       lastUserActivityTime(0),
-      screenDimmed(false) {
+      screenDimmed(false),
+      suppressButtonUntilRelease(false),
+      suppressTouchUntilRelease(false) {
 }
 
 void InputHandler::init() {
@@ -24,6 +26,76 @@ void InputHandler::init() {
     lastEncoderPos = M5Dial.Encoder.read();
     lastUserActivityTime = millis();
     screenDimmed = false;
+}
+
+bool InputHandler::shouldActivateScreenSaver(
+    TimerState currentState,
+    const PomodoroSettings& settings) const {
+
+    if (currentState != STATE_IDLE || settings.screenSaverTimeout == 0) {
+        return false;
+    }
+
+    const uint32_t timeoutMs =
+        (uint32_t)settings.screenSaverTimeout * 60000UL;
+
+    return millis() - lastUserActivityTime >= timeoutMs;
+}
+
+bool InputHandler::processScreenSaverWake(
+    bool& screenSaverActive,
+    const PomodoroSettings& settings) {
+
+    // Continue suppressing the input that originally woke the display.
+    if (suppressButtonUntilRelease) {
+        if (M5Dial.BtnA.isPressed()) {
+            return true;
+        }
+        suppressButtonUntilRelease = false;
+    }
+
+    if (suppressTouchUntilRelease) {
+        auto touch = M5Dial.Touch.getDetail();
+        if (touch.isPressed()) {
+            return true;
+        }
+        suppressTouchUntilRelease = false;
+    }
+
+    if (!screenSaverActive) {
+        return false;
+    }
+
+    long currentEncoderPos = M5Dial.Encoder.read();
+
+    bool encoderMoved = currentEncoderPos != lastEncoderPos;
+    bool buttonDown = M5Dial.BtnA.isPressed();
+
+    auto touch = M5Dial.Touch.getDetail();
+    bool touchDown = touch.isPressed();
+
+    if (!encoderMoved && !buttonDown && !touchDown) {
+        return true;  // Keep displaying the clock.
+    }
+
+    // Wake without performing the input's normal action.
+    screenSaverActive = false;
+
+    lastEncoderPos = currentEncoderPos;
+    settingsMenuAccum = 0;
+    settingsEditAccum = 0;
+    idleAdjustAccum = 0;
+
+    buttonPressed = false;
+    longPressHandled = false;
+
+    suppressButtonUntilRelease = buttonDown;
+    suppressTouchUntilRelease = touchDown;
+
+    noteUserActivity(settings);
+
+    Serial.println("Screen saver dismissed");
+    return true;
 }
 
 void InputHandler::processInput(TimerState& currentState,
