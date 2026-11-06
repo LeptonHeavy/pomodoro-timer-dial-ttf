@@ -96,7 +96,7 @@ void Display::ensureTimerSprite() {
 void Display::ensureSettingsSprite() {
     if (!settingsSpriteReady) {
         settingsSprite.setColorDepth(16);
-        settingsSprite.createSprite(SCREEN_WIDTH, 165);
+        settingsSprite.createSprite(SCREEN_WIDTH, 145);
         settingsSprite.setTextDatum(top_center);
         settingsSpriteReady = true;
     }
@@ -369,7 +369,7 @@ void Display::drawSettingsMenu(const PomodoroSettings& settings, uint8_t menuInd
         settingsSprite.setTextSize(1);
     }
 
-    int16_t yPos = 10;
+    int16_t yPos = 4;
 
     const char* menuItems[] = {
         "Work Duration",
@@ -377,10 +377,11 @@ void Display::drawSettingsMenu(const PomodoroSettings& settings, uint8_t menuInd
         "Long Break",
         "Sessions/Long",
         "Brightness",
+        "Screen Saver",
         "Back"
     };
 
-    for (uint8_t i = 0; i < 6; i++) {
+    for (uint8_t i = 0; i < 7; i++) {
                 if (i == menuIndex) {
             settingsSprite.fillRect(10, yPos - 4, SCREEN_WIDTH - 20, 22, COLOR_PROGRESS_BG);
 
@@ -405,19 +406,27 @@ void Display::drawSettingsMenu(const PomodoroSettings& settings, uint8_t menuInd
         } else if (i == 3) {
             snprintf(baseLine, sizeof(baseLine), "%s: %d", menuItems[i], settings.pomodorosUntilLongBreak);
         } else if (i == 4) {
-            snprintf(baseLine, sizeof(baseLine), "%s: Level %d/6", menuItems[i], settings.brightnessLevel);
+            snprintf(baseLine, sizeof(baseLine), "%s: Level %d/6",
+                    menuItems[i], settings.brightnessLevel);
+        } else if (i == 5) {
+            if (settings.screenSaverTimeout == 0) {
+                snprintf(baseLine, sizeof(baseLine), "Screen Saver: Off");
+            } else {
+                snprintf(baseLine, sizeof(baseLine), "Screen Saver: %u min",
+                        settings.screenSaverTimeout);
+            }
         } else {
             snprintf(baseLine, sizeof(baseLine), "%s", menuItems[i]);
         }
 
-        if (editing && i == menuIndex && i != 5) {
+        if (editing && i == menuIndex && i != 6) {
             snprintf(line, sizeof(line), "-- %s --", baseLine);
         } else {
             snprintf(line, sizeof(line), "%s", baseLine);
         }
 
         settingsSprite.drawString(line, CENTER_X, yPos);
-        yPos += 25;
+        yPos += 21;
     }
 
     settingsSprite.pushSprite(0, 40);
