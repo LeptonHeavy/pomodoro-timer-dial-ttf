@@ -8,56 +8,125 @@
 
 Display::Display()
   : timerSprite(&M5Dial.Display),
-    settingsSprite(&M5Dial.Display) {
+    settingsSprite(&M5Dial.Display),
+    clockTimeSprite(&M5Dial.Display),
+    clockDateSprite(&M5Dial.Display) {
     // Constructor - nothing to initialize
 }
 
-void Display::drawClockScreen(const m5::rtc_datetime_t& dateTime) {
+void Display::ensureClockSprites() {
+    if (clockSpritesReady) {
+        return;
+    }
+
+    clockTimeSprite.setColorDepth(16);
+    clockDateSprite.setColorDepth(16);
+
+    if (!clockTimeSprite.createSprite(220, 90) ||
+        !clockDateSprite.createSprite(220, 40)) {
+        Serial.println("Failed to allocate clock sprites");
+        return;
+    }
+
+    clockTimeSprite.setTextDatum(middle_center);
+    clockDateSprite.setTextDatum(middle_center);
+
+    clockTimeFontLoaded =
+        clockTimeSprite.loadFont(SPIFFS, "/fonts/RobotoMonoBold72.vlw");
+
+    clockDateFontLoaded =
+        clockDateSprite.loadFont(SPIFFS, "/fonts/RobotoRegularBold20.vlw");
+
+    clockSpritesReady = true;
+}
+
+void Display::drawClockScreen(const m5::rtc_datetime_t& dateTime,
+                              bool forceRedraw) {
     const uint16_t bgColor = TFT_BLACK;
     const uint16_t fgColor = TFT_WHITE;
 
-    M5Dial.Display.fillScreen(bgColor);
-    M5Dial.Display.setTextColor(fgColor, bgColor);
-    M5Dial.Display.setTextDatum(middle_center);
+    ensureClockSprites();
 
-    char timeText[12];
-    snprintf(timeText, sizeof(timeText),
-             "%02u:%02u:%02u",
-             dateTime.time.hours,
-             dateTime.time.minutes,
-             dateTime.time.seconds);
+    const uint32_t minuteKey =
+        (uint32_t)dateTime.time.hours * 60 +
+        dateTime.time.minutes;
 
-    // Large time display
-    if (loadUiFont("/fonts/RobotoMonoBold72.vlw")) {
-        // This font is too large for HH:MM:SS on a 240px display,
-        // so display hours and minutes using the large font.
-        char shortTime[6];
-        snprintf(shortTime, sizeof(shortTime),
+    const uint32_t dateKey =
+        (uint32_t)dateTime.date.year * 10000 +
+        (uint32_t)dateTime.date.month * 100 +
+        dateTime.date.date;
+
+    if (forceRedraw) {
+        M5Dial.Display.fillScreen(bgColor);
+    }
+
+    // Update hours/minutes only when necessary.
+    if (forceRedraw || minuteKey != lastClockMinute) {
+        char timeText[6];
+
+        snprintf(timeText, sizeof(timeText),
                  "%02u:%02u",
                  dateTime.time.hours,
                  dateTime.time.minutes);
 
-        M5Dial.Display.drawString(shortTime, CENTER_X, CENTER_Y - 20);
-        M5Dial.Display.unloadFont();
-    } else {
-        M5Dial.Display.setTextSize(4);
-        M5Dial.Display.drawString(timeText, CENTER_X, CENTER_Y - 20);
+        if (clockSpritesReady) {
+            clockTimeSprite.fillSprite(bgColor);
+            clockTimeSprite.setTextColor(fgColor, bgColor);
+            clockTimeSprite.setTextDatum(middle_center);
+
+            if (!clockTimeFontLoaded) {
+                clockTimeSprite.setTextSize(4);
+            }
+
+            clockTimeSprite.drawString(timeText, 110, 45);
+            clockTimeSprite.pushSprite(CENTER_X - 110,
+                                       CENTER_Y - 65);
+        } else {
+            M5Dial.Display.fillRect(CENTER_X - 110,
+                                   CENTER_Y - 65, 220, 90, bgColor);
+            M5Dial.Display.setTextColor(fgColor, bgColor);
+            M5Dial.Display.setTextDatum(middle_center);
+            M5Dial.Display.setTextSize(4);
+            M5Dial.Display.drawString(timeText,
+                                      CENTER_X, CENTER_Y - 20);
+        }
+
+        lastClockMinute = minuteKey;
     }
 
-    // Date display
-    char dateText[20];
-    snprintf(dateText, sizeof(dateText),
-             "%04u-%02u-%02u",
-             dateTime.date.year,
-             dateTime.date.month,
-             dateTime.date.date);
+    // Update date only when necessary.
+    if (forceRedraw || dateKey != lastClockDate) {
+        char dateText[20];
 
-    if (loadUiFont("/fonts/RobotoRegularBold20.vlw")) {
-        M5Dial.Display.drawString(dateText, CENTER_X, CENTER_Y + 45);
-        M5Dial.Display.unloadFont();
-    } else {
-        M5Dial.Display.setTextSize(2);
-        M5Dial.Display.drawString(dateText, CENTER_X, CENTER_Y + 45);
+        snprintf(dateText, sizeof(dateText),
+                 "%02u/%02u/%04u",
+                 dateTime.date.month,
+                 dateTime.date.date,
+                 dateTime.date.year);
+
+        if (clockSpritesReady) {
+            clockDateSprite.fillSprite(bgColor);
+            clockDateSprite.setTextColor(fgColor, bgColor);
+            clockDateSprite.setTextDatum(middle_center);
+
+            if (!clockDateFontLoaded) {
+                clockDateSprite.setTextSize(2);
+            }
+
+            clockDateSprite.drawString(dateText, 110, 20);
+            clockDateSprite.pushSprite(CENTER_X - 110,
+                                       CENTER_Y + 25);
+        } else {
+            M5Dial.Display.fillRect(CENTER_X - 110,
+                                   CENTER_Y + 25, 220, 40, bgColor);
+            M5Dial.Display.setTextColor(fgColor, bgColor);
+            M5Dial.Display.setTextDatum(middle_center);
+            M5Dial.Display.setTextSize(2);
+            M5Dial.Display.drawString(dateText,
+                                      CENTER_X, CENTER_Y + 45);
+        }
+
+        lastClockDate = dateKey;
     }
 }
 

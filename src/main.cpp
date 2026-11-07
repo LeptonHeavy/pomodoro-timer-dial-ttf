@@ -147,10 +147,6 @@ void setup() {
     M5Dial.begin(cfg, true, true);
     loadSettings();
 
-    Serial.println("RTC diagnostic:");
-    printRtcDateTime();
-    
-
     // Initialize SPIFFS for image loading
     if (!SPIFFS.begin(true)) {
         Serial.println("SPIFFS Mount Failed");
@@ -239,12 +235,6 @@ void loop() {
         return;
     }
 
-    static uint32_t lastRtcReport = 0;
-
-    if (millis() - lastRtcReport >= 10000) {
-        lastRtcReport = millis();
-        printRtcDateTime();
-    }
     // Performance monitoring (optional debug mode)
     #if ENABLE_PERFORMANCE_MONITOR
     static uint32_t loopCount = 0;
@@ -271,7 +261,7 @@ void loop() {
         screenSaverActive = true;
         lastClockDraw = millis();
 
-        display.drawClockScreen(M5Dial.Rtc.getDateTime());
+        display.drawClockScreen(M5Dial.Rtc.getDateTime(), true);
 
         Serial.println("Screen saver activated");
         delay(10);

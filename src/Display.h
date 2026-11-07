@@ -17,8 +17,9 @@ public:
     // Constructor
     Display();
     
-    void drawClockScreen(const m5::rtc_datetime_t& dateTime);
-    
+    void drawClockScreen(const m5::rtc_datetime_t& dateTime,
+                     bool forceRedraw = false);
+
     // Main drawing functions
     void drawTimerDisplay(uint32_t seconds, uint16_t color, TimerState state, 
                          uint32_t duration, uint32_t remaining, 
@@ -53,6 +54,18 @@ private:
     bool settingsFontLoaded = false;
     void ensureSettingsSprite();
 
+    // Screen saver clock sprites
+    lgfx::LGFX_Sprite clockTimeSprite;
+    lgfx::LGFX_Sprite clockDateSprite;
+
+    bool clockSpritesReady = false;
+    bool clockTimeFontLoaded = false;
+    bool clockDateFontLoaded = false;
+
+    uint32_t lastClockMinute = UINT32_MAX;
+    uint32_t lastClockDate = UINT32_MAX;
+
+    void ensureClockSprites();
 };
 
 #endif // DISPLAY_H
